@@ -1,8 +1,9 @@
-# 22.07 (UNRELEASED)
+# 22.07 (2022-07-29)
 
-Compare checkpoint: https://github.com/helix-editor/helix/compare/14eca318a772353a3bfa2d86c196572e25497132...master
+A big _thank you_ to our contributors! This release had 78 contributors.
 
----
+As usual, the following is a summary of each of the changes since the last release.
+For the full log, check out the [git log](https://github.com/helix-editor/helix/compare/22.03..22.05).
 
 Breaking changes:
 
