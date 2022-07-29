@@ -1,6 +1,6 @@
 # 22.07 (UNRELEASED)
 
-Compare checkpoint: https://github.com/helix-editor/helix/compare/bcacc703d737300e3e315b0b8a4716cdf306da87...master
+Compare checkpoint: https://github.com/helix-editor/helix/compare/14eca318a772353a3bfa2d86c196572e25497132...master
 
 ---
 
@@ -12,12 +12,15 @@ Breaking changes:
 Features:
 
 - Add an integration testing harness (#2359)
-- Indent guides (#1796)
+- Indent guides (#1796, 906259c)
 - Cursorline (#2170, fde9e03)
 - Select all instances of the symbol under the cursor (`<space>h`) (#2738)
 - A picker for document and workspace LSP diagnostics (`<space>g`/`<space>G`) (#2013, #2984)
 - Allow styling the mode indicator per-mode (#2676)
 - Live preview for the theme picker (#1798)
+- Configurable statusline (#2434)
+- LSP SignatureHelp (#1755)
+- A picker for the jumplist (#3033)
 
 Commands:
 
@@ -25,6 +28,7 @@ Commands:
 - The `t` textobject (`]t`/`[t`/`mit`/`mat`) for navigating tests (#2807)
 - `C-Backspace` and `C-Delete` for word-wise deletion in prompts and pickers (#2500)
 - `A-Delete` for forward word-wise deletion in insert mode (#2500)
+- `C-t` for toggling the preview pane in pickers (#3021)
 
 Usability improvements and fixes:
 
@@ -66,7 +70,7 @@ Usability improvements and fixes:
 - Fix recursive macro crash and empty macro lockout (#2902)
 - Fix backwards character deletion on other whitespaces (#2855)
 - Add search and space/backspace bindings to view modes (#2803)
-- Add `--vsplit` and `--hsplit` CLI arguments for opening in splits (#2773)
+- Add `--vsplit` and `--hsplit` CLI arguments for opening in splits (#2773, #3073)
 - Sort themes, languages and files inputs by score and name (#2675)
 - Highlight entire rows in (#2939)
 - Fix backwards selection duplication widening bug (#2945, #3024)
@@ -76,6 +80,19 @@ Usability improvements and fixes:
 - Respect count for repeating motion (#3057)
 - Respect count for selecting next/previous match (#3056)
 - Respect count for tree-sitter motions (#3058)
+- Make gutters padding optional (#2996)
+- Support pre-filling prompts (#2459)
+- Add statusline element to display file line-endings (#3113)
+- Keep jump and file history when using `:split` (#3031, #3160)
+- Make tree-sitter query `; inherits <language>` feature imperative (#2470)
+- Indent with tabs by default (#3095)
+- Fix non-msvc grammar compilation on Windows (#3190)
+- Add spacer element to the statusline (#3165, 255c173)
+- Make gutters padding automatic (#3163)
+- Add `code` for LSP `Diagnostic` type (#3096)
+- Add position percentage to the statusline (#3168)
+- Add a configurable and themable statusline separator string (#3175)
+- Use OR of all selections when `search_selection` acts on multiple selections (#3138)
 
 Themes:
 
@@ -89,12 +106,17 @@ Themes:
 - Add `acme` (#2876)
 - Add `meliora` (#2884, #2890)
 - Add cursorline scopes to various themes (33d287a, #2892, #2915, #2916, #2918, #2927, #2925, #2938, #2962, #3054)
-- Add mode colors to various themes (#2926, #2933, #2929)
+- Add mode colors to various themes (#2926, #2933, #2929, #3098, #3104, #3128, #3135, #3200)
 - Add `nord_light` (#2908)
 - Update `night_owl` (#2929)
 - Update `autumn` (2e70985, 936ed3a)
 - Update `one_dark` (#3011)
-- Add `noctis` (#3043)
+- Add `noctis` (#3043, #3128)
+- Update `boo_berry` (#3191)
+- Update `monokai` (#3131)
+- Add `ayu_dark`, `ayu_light`, `ayu_mirage` (#3184)
+- Update `onelight` (#3226)
+- Add `base16_transparent` (#3216)
 
 LSP:
 
@@ -105,6 +127,8 @@ LSP:
 - Elvish (#2948)
 - Idris (#2971)
 - Fortran (#3025)
+- Gleam (#3139)
+- Odin (#3214)
 
 New languages:
 
@@ -118,6 +142,8 @@ New languages:
 - Elvish (#2948)
 - Fortran (#3025)
 - Ungrammar (#3048)
+- SCSS (#3074)
+- Go Template (#3091)
 
 Updated languages and queries:
 
@@ -126,7 +152,7 @@ Updated languages and queries:
 - CPON (#2643)
 - Textobjects queries for Erlang, Elixir, Gleam (#2661)
 - Capture rust closures as function textobjects (4a27e2d)
-- Heex (#2800)
+- Heex (#2800, #3170)
 - Add `<<=` operator highlighting for Rust (#2805)
 - Fix comment injection in JavaScript/TypeScript (#2763)
 - Nickel (#2859)
@@ -144,15 +170,22 @@ Updated languages and queries:
 - Add Haskell LSP roots (#2954)
 - Ledger (#2936, #2988)
 - Nickel (#2987)
-- JavaScript (#2961)
-- TypeScript (#2961)
+- JavaScript (#2961, #3219, #3213)
+- TypeScript (#2961, #3219, #3213)
 - GLSL (#3051)
+- Fix locals tracking in Rust (#3027, #3212)
+- Verilog (#3158)
+- Ruby (#3173)
+- Svelte (#3147)
+- Add Elixir and HEEx comment textobjects (#3179)
+- Python (#3103, #3201)
 
 Packaging:
 
 - Add `rust-analyzer` to Nix flake devShell (#2739)
 - Add cachix information to the Nix flake (#2999)
 - Pass makeWrapperArgs to wrapProgram in the Nix flake (#3003)
+- Add a way to override which grammars are built by Nix (#3141)
 
 # 22.05 (2022-05-28)
 
