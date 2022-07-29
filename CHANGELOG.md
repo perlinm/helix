@@ -19,7 +19,7 @@ Features:
 - Allow styling the mode indicator per-mode ([#2676](https://github.com/helix-editor/helix/pull/2676))
 - Live preview for the theme picker ([#1798](https://github.com/helix-editor/helix/pull/1798))
 - Configurable statusline ([#2434](https://github.com/helix-editor/helix/pull/2434))
-- LSP SignatureHelp ([#1755](https://github.com/helix-editor/helix/pull/1755))
+- LSP SignatureHelp ([#1755](https://github.com/helix-editor/helix/pull/1755), [a8b123f](https://github.com/helix-editor/helix/commit/a8b123f))
 - A picker for the jumplist ([#3033](https://github.com/helix-editor/helix/pull/3033))
 
 Commands:
