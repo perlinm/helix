@@ -1,6 +1,6 @@
 # 22.07 (2022-07-30)
 
-A big _thank you_ to our contributors! This release had 78 contributors.
+A big _thank you_ to our contributors! This release had 79 contributors.
 
 As usual, the following is a summary of each of the changes since the last release.
 For the full log, check out the [git log](https://github.com/helix-editor/helix/compare/22.05..22.07).
@@ -82,7 +82,7 @@ Usability improvements and fixes:
 - Respect count for selecting next/previous match ([#3056](https://github.com/helix-editor/helix/pull/3056))
 - Respect count for tree-sitter motions ([#3058](https://github.com/helix-editor/helix/pull/3058))
 - Make gutters padding optional ([#2996](https://github.com/helix-editor/helix/pull/2996))
-- Support pre-filling prompts ([#2459](https://github.com/helix-editor/helix/pull/2459))
+- Support pre-filling prompts ([#2459](https://github.com/helix-editor/helix/pull/2459), [#3259](https://github.com/helix-editor/helix/pull/3259))
 - Add statusline element to display file line-endings ([#3113](https://github.com/helix-editor/helix/pull/3113))
 - Keep jump and file history when using `:split` ([#3031](https://github.com/helix-editor/helix/pull/3031), [#3160](https://github.com/helix-editor/helix/pull/3160))
 - Make tree-sitter query `; inherits <language>` feature imperative ([#2470](https://github.com/helix-editor/helix/pull/2470))
@@ -118,6 +118,7 @@ Themes:
 - Add `ayu_dark`, `ayu_light`, `ayu_mirage` ([#3184](https://github.com/helix-editor/helix/pull/3184))
 - Update `onelight` ([#3226](https://github.com/helix-editor/helix/pull/3226))
 - Add `base16_transparent` ([#3216](https://github.com/helix-editor/helix/pull/3216))
+- Add `flatwhite` ([#3236](https://github.com/helix-editor/helix/pull/3236))
 
 LSP:
 
@@ -145,6 +146,7 @@ New languages:
 - Ungrammar ([#3048](https://github.com/helix-editor/helix/pull/3048))
 - SCSS ([#3074](https://github.com/helix-editor/helix/pull/3074))
 - Go Template ([#3091](https://github.com/helix-editor/helix/pull/3091))
+- Graphiz dot ([#3241](https://github.com/helix-editor/helix/pull/3241))
 
 Updated languages and queries:
 
