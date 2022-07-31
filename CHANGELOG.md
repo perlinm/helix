@@ -1,6 +1,6 @@
-# 22.07 (2022-07-30)
+# 22.08 (2022-08-02)
 
-A big _thank you_ to our contributors! This release had 79 contributors.
+A big _thank you_ to our contributors! This release had 82 contributors.
 
 As usual, the following is a summary of each of the changes since the last release.
 For the full log, check out the [git log](https://github.com/helix-editor/helix/compare/22.05..22.07).
