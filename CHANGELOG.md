@@ -76,7 +76,7 @@ Usability improvements and fixes:
 - Highlight entire rows in ([#2939](https://github.com/helix-editor/helix/pull/2939))
 - Fix backwards selection duplication widening bug ([#2945](https://github.com/helix-editor/helix/pull/2945), [#3024](https://github.com/helix-editor/helix/pull/3024))
 - Skip serializing Option type DAP fields ([44f5963](https://github.com/helix-editor/helix/commit/44f5963))
-- Fix required `cwd` field in DAP `RunTerminalArguments` type ([85411be](https://github.com/helix-editor/helix/commit/85411be))
+- Fix required `cwd` field in DAP `RunTerminalArguments` type ([85411be](https://github.com/helix-editor/helix/commit/85411be), [#3240](https://github.com/helix-editor/helix/pull/3240))
 - Add LSP `workspace/applyEdit` to client capabilities ([#3012](https://github.com/helix-editor/helix/pull/3012))
 - Respect count for repeating motion ([#3057](https://github.com/helix-editor/helix/pull/3057))
 - Respect count for selecting next/previous match ([#3056](https://github.com/helix-editor/helix/pull/3056))
@@ -94,6 +94,8 @@ Usability improvements and fixes:
 - Add position percentage to the statusline ([#3168](https://github.com/helix-editor/helix/pull/3168))
 - Add a configurable and themable statusline separator string ([#3175](https://github.com/helix-editor/helix/pull/3175))
 - Use OR of all selections when `search_selection` acts on multiple selections ([#3138](https://github.com/helix-editor/helix/pull/3138))
+- Add clipboard information to logs and the healthcheck ([#3271](https://github.com/helix-editor/helix/pull/3271))
+- Fix align selection behavior on tabs ([#3276](https://github.com/helix-editor/helix/pull/3276))
 
 Themes:
 
@@ -147,6 +149,7 @@ New languages:
 - SCSS ([#3074](https://github.com/helix-editor/helix/pull/3074))
 - Go Template ([#3091](https://github.com/helix-editor/helix/pull/3091))
 - Graphiz dot ([#3241](https://github.com/helix-editor/helix/pull/3241))
+- Cue ([#3262](https://github.com/helix-editor/helix/pull/3262))
 
 Updated languages and queries:
 
