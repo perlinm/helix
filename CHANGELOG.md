@@ -9,6 +9,8 @@ Breaking changes:
 
 - Special keymap names for `<`, `>`, `+`, `;` and `%` have been replaced with those literal characters ([#2677](https://github.com/helix-editor/helix/pull/2677))
 - `A-Left` and `A-Right` have become `C-Left` and `C-Right` for word-wise motion ([#2500](https://github.com/helix-editor/helix/pull/2500))
+- The `catppuccin` theme's name has been corrected from `catpuccin` ([#2713](https://github.com/helix-editor/helix/pull/2713))
+- `catppuccin` has been replaced by its variants, `catppuccin_frappe`, `catppuccin_latte`, `catppuccin_macchiato`, `catppuccin_mocha` ([#3281](https://github.com/helix-editor/helix/pull/3281))
 
 Features:
 
@@ -176,7 +178,7 @@ Updated languages and queries:
 - Add Haskell LSP roots ([#2954](https://github.com/helix-editor/helix/pull/2954))
 - Ledger ([#2936](https://github.com/helix-editor/helix/pull/2936), [#2988](https://github.com/helix-editor/helix/pull/2988))
 - Nickel ([#2987](https://github.com/helix-editor/helix/pull/2987))
-- JavaScript ([#2961](https://github.com/helix-editor/helix/pull/2961), [#3219](https://github.com/helix-editor/helix/pull/3219), [#3213](https://github.com/helix-editor/helix/pull/3213))
+- JavaScript ([#2961](https://github.com/helix-editor/helix/pull/2961), [#3219](https://github.com/helix-editor/helix/pull/3219), [#3213](https://github.com/helix-editor/helix/pull/3213), [#3280](https://github.com/helix-editor/helix/pull/3280))
 - TypeScript ([#2961](https://github.com/helix-editor/helix/pull/2961), [#3219](https://github.com/helix-editor/helix/pull/3219), [#3213](https://github.com/helix-editor/helix/pull/3213))
 - GLSL ([#3051](https://github.com/helix-editor/helix/pull/3051))
 - Fix locals tracking in Rust ([#3027](https://github.com/helix-editor/helix/pull/3027), [#3212](https://github.com/helix-editor/helix/pull/3212))
@@ -184,7 +186,7 @@ Updated languages and queries:
 - Ruby ([#3173](https://github.com/helix-editor/helix/pull/3173))
 - Svelte ([#3147](https://github.com/helix-editor/helix/pull/3147))
 - Add Elixir and HEEx comment textobjects ([#3179](https://github.com/helix-editor/helix/pull/3179))
-- Python ([#3103](https://github.com/helix-editor/helix/pull/3103), [#3201](https://github.com/helix-editor/helix/pull/3201))
+- Python ([#3103](https://github.com/helix-editor/helix/pull/3103), [#3201](https://github.com/helix-editor/helix/pull/3201), [#3284](https://github.com/helix-editor/helix/pull/3284))
 
 Packaging:
 
