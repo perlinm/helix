@@ -243,7 +243,7 @@ impl<T, D> Column<T, D> {
 type DynQueryCallback<T, D> =
     fn(&str, &mut Editor, Arc<D>, &Injector<T, D>) -> BoxFuture<'static, anyhow::Result<()>>;
 
-pub struct Picker<T: 'static + Send + Sync, D: 'static> {
+pub struct Picker<T: 'static + Send + Sync, D: 'static, C: 'static = ()> {
     columns: Arc<[Column<T, D>]>,
     primary_column: usize,
     editor_data: Arc<D>,
@@ -273,9 +273,35 @@ pub struct Picker<T: 'static + Send + Sync, D: 'static> {
     /// An event handler for syntax highlighting the currently previewed file.
     preview_highlight_handler: Sender<Arc<Path>>,
     dynamic_query_handler: Option<Sender<Arc<str>>>,
+
+    config: C,
 }
 
 impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
+    pub fn new<C, O, F>(
+        columns: C,
+        primary_column: usize,
+        options: O,
+        editor_data: D,
+        callback_fn: F,
+    ) -> Self
+    where
+        C: IntoIterator<Item = Column<T, D>>,
+        O: IntoIterator<Item = T>,
+        F: Fn(&mut Context, &T, Action) + 'static,
+    {
+        Self::new_with_config(
+            (),
+            columns,
+            primary_column,
+            options,
+            editor_data,
+            callback_fn,
+        )
+    }
+}
+
+impl<T: 'static + Send + Sync, D: 'static + Send + Sync, CFG> Picker<T, D, CFG> {
     pub fn stream(
         columns: impl IntoIterator<Item = Column<T, D>>,
         editor_data: D,
@@ -300,7 +326,8 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         (matcher, streamer)
     }
 
-    pub fn new<C, O, F>(
+    pub fn new_with_config<C, O, F>(
+        config: CFG,
         columns: C,
         primary_column: usize,
         options: O,
@@ -326,6 +353,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
             inject_nucleo_item(&injector, &columns, item, &editor_data);
         }
         Self::with(
+            config,
             matcher,
             columns,
             primary_column,
@@ -340,8 +368,12 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         primary_column: usize,
         injector: Injector<T, D>,
         callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
-    ) -> Self {
+    ) -> Self
+    where
+        CFG: Default,
+    {
         Self::with(
+            CFG::default(),
             matcher,
             injector.columns,
             primary_column,
@@ -352,6 +384,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
     }
 
     fn with(
+        config: CFG,
         matcher: Nucleo<T>,
         columns: Arc<[Column<T, D>]>,
         default_column: usize,
@@ -394,6 +427,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
             file_fn: None,
             preview_highlight_handler: PreviewHighlightHandler::<T, D>::default().spawn(),
             dynamic_query_handler: None,
+            config,
         }
     }
 
@@ -934,7 +968,55 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
     }
 }
 
-impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I, D> {
+trait PickerNavigation<D> {
+    fn change_root(&mut self, _root: Arc<D>, _cx: &mut Context) {}
+    fn goto_parent(&mut self, _cx: &mut Context) {}
+    fn goto_child(&mut self, _cx: &mut Context) {}
+}
+
+impl<T: 'static + Send + Sync, D: 'static> PickerNavigation<D> for Picker<T, D> {}
+
+impl PickerNavigation<PathBuf> for Picker<PathBuf, PathBuf, helix_view::editor::FilePickerConfig> {
+    fn change_root(&mut self, root: Arc<PathBuf>, cx: &mut Context) {
+        cx.editor.set_status(root.display().to_string());
+        self.editor_data = root;
+        let files = ui::walk_dir(&self.editor_data, &self.config);
+        self.matcher.restart(true);
+        ui::inject_files(&*self, files);
+        self.cursor = 0;
+    }
+
+    fn goto_parent(&mut self, cx: &mut Context) {
+        if let Some(parent) = &self.editor_data.parent() {
+            self.change_root(Arc::new(parent.to_path_buf()), cx);
+        }
+    }
+
+    fn goto_child(&mut self, cx: &mut Context) {
+        use std::ops::Deref;
+
+        if let Some(selection) = self.selection() {
+            let component = selection
+                .strip_prefix(&*self.editor_data)
+                .ok()
+                .map(Path::components)
+                .and_then(|mut iter| iter.next());
+            if let Some(comp) = component {
+                let mut child = self.editor_data.deref().clone();
+                child.push(comp);
+                if child.is_dir() {
+                    self.prompt.clear(cx.editor);
+                    self.change_root(Arc::new(child), cx);
+                }
+            }
+        }
+    }
+}
+
+impl<I: 'static + Send + Sync, D: 'static + Send + Sync, CFG> Component for Picker<I, D, CFG>
+where
+    Picker<I, D, CFG>: PickerNavigation<D>,
+{
     fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
         // +---------+ +---------+
         // |prompt   | |preview  |
@@ -1052,6 +1134,12 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
             ctrl!('t') => {
                 self.toggle_preview();
             }
+            ctrl!('a') => {
+                self.goto_parent(ctx);
+            }
+            ctrl!('e') => {
+                self.goto_child(ctx);
+            }
             _ => {
                 self.prompt_handle_event(event, ctx);
             }
@@ -1080,7 +1168,7 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
         Some(ID)
     }
 }
-impl<T: 'static + Send + Sync, D> Drop for Picker<T, D> {
+impl<T: 'static + Send + Sync, D, C> Drop for Picker<T, D, C> {
     fn drop(&mut self) {
         // ensure we cancel any ongoing background threads streaming into the picker
         self.version.fetch_add(1, atomic::Ordering::Relaxed);
