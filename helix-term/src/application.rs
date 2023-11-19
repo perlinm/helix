@@ -165,7 +165,7 @@ impl Application {
             if args.open_cwd {
                 // NOTE: The working directory is already set to args.files[0] in main()
                 editor.new_file(Action::VerticalSplit);
-                let picker = ui::file_picker(".".into(), &config.load().editor);
+                let picker = ui::file_picker(".".into(), editor.config().file_picker);
                 compositor.push(Box::new(overlaid(picker)));
             } else {
                 let nr_of_files = args.files.len();
