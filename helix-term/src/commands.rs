@@ -60,8 +60,13 @@ use crate::{
 
 use crate::job::{self, Jobs};
 use futures_util::{stream::FuturesUnordered, TryStreamExt};
-use std::{collections::HashMap, fmt, future::Future};
-use std::{collections::HashSet, num::NonZeroUsize};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+    future::Future,
+    io::Read,
+    num::NonZeroUsize,
+};
 
 use std::{
     borrow::Cow,
@@ -70,6 +75,7 @@ use std::{
 
 use once_cell::sync::Lazy;
 use serde::de::{self, Deserialize, Deserializer};
+use url::Url;
 
 use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{sinks, BinaryDetection, SearcherBuilder};
@@ -331,7 +337,7 @@ impl MappableCommand {
         goto_implementation, "Goto implementation",
         goto_file_start, "Goto line number <n> else file start",
         goto_file_end, "Goto file end",
-        goto_file, "Goto files in selection",
+        goto_file, "Goto files/URLs in selection",
         goto_file_hsplit, "Goto files in selection (hsplit)",
         goto_file_vsplit, "Goto files in selection (vsplit)",
         goto_reference, "Goto references",
@@ -1190,10 +1196,53 @@ fn goto_file_impl(cx: &mut Context, action: Action) {
                 .to_string(),
         );
     }
+
     for sel in paths {
         let p = sel.trim();
-        if !p.is_empty() {
-            let path = &rel_path.join(p);
+        if p.is_empty() {
+            continue;
+        }
+
+        if let Ok(url) = Url::parse(p) {
+            return open_url(cx, url, action);
+        }
+
+        let path = &rel_path.join(p);
+        if path.is_dir() {
+            let picker = ui::file_picker(path.into(), cx.editor.config().file_picker);
+            cx.push_layer(Box::new(overlaid(picker)));
+        } else if let Err(e) = cx.editor.open(path, action) {
+            cx.editor.set_error(format!("Open file failed: {:?}", e));
+        }
+    }
+}
+
+/// Opens the given url. If the URL points to a valid textual file it is open in helix.
+//  Otherwise, the file is open using external program.
+fn open_url(cx: &mut Context, url: Url, action: Action) {
+    let doc = doc!(cx.editor);
+    let rel_path = doc
+        .relative_path()
+        .map(|path| path.parent().unwrap().to_path_buf())
+        .unwrap_or_default();
+
+    if url.scheme() != "file" {
+        return open_external_url(cx, url);
+    }
+
+    let content_type = std::fs::File::open(url.path()).and_then(|file| {
+        // Read up to 1kb to detect the content type
+        let mut read_buffer = Vec::new();
+        let n = file.take(1024).read_to_end(&mut read_buffer)?;
+        Ok(content_inspector::inspect(&read_buffer[..n]))
+    });
+
+    // we attempt to open binary files - files that can't be open in helix - using external
+    // program as well, e.g. pdf files or images
+    match content_type {
+        Ok(content_inspector::ContentType::BINARY) => open_external_url(cx, url),
+        Ok(_) | Err(_) => {
+            let path = &rel_path.join(url.path());
             if path.is_dir() {
                 let picker = ui::file_picker(path.into(), cx.editor.config().file_picker);
                 cx.push_layer(Box::new(overlaid(picker)));
@@ -1202,6 +1251,23 @@ fn goto_file_impl(cx: &mut Context, action: Action) {
             }
         }
     }
+}
+
+/// Opens URL in external program.
+fn open_external_url(cx: &mut Context, url: Url) {
+    let commands = open::commands(url.as_str());
+    cx.jobs.callback(async {
+        for cmd in commands {
+            let mut command = tokio::process::Command::new(cmd.get_program());
+            command.args(cmd.get_args());
+            if command.output().await.is_ok() {
+                return Ok(job::Callback::Editor(Box::new(|_| {})));
+            }
+        }
+        Ok(job::Callback::Editor(Box::new(move |editor| {
+            editor.set_error("Opening URL in external program failed")
+        })))
+    });
 }
 
 fn extend_word_impl<F>(cx: &mut Context, extend_fn: F)
@@ -1252,7 +1318,7 @@ fn extend_next_long_word_end(cx: &mut Context) {
     extend_word_impl(cx, movement::move_next_long_word_end)
 }
 
-/// Separate branch to find_char designed only for <ret> char.
+/// Separate branch to find_char designed only for `<ret>` char.
 //
 // This is necessary because the one document can have different line endings inside. And we
 // cannot predict what character to find when <ret> is pressed. On the current line it can be `lf`
@@ -4121,9 +4187,13 @@ fn replace_with_yanked(cx: &mut Context) {
 }
 
 fn replace_with_yanked_impl(editor: &mut Editor, register: char, count: usize) {
-    let Some(values) = editor.registers
+    let Some(values) = editor
+        .registers
         .read(register, editor)
-        .filter(|values| values.len() > 0) else { return };
+        .filter(|values| values.len() > 0)
+    else {
+        return;
+    };
     let values: Vec<_> = values.map(|value| value.to_string()).collect();
 
     let (view, doc) = current!(editor);
@@ -4160,7 +4230,9 @@ fn replace_selections_with_primary_clipboard(cx: &mut Context) {
 }
 
 fn paste(editor: &mut Editor, register: char, pos: Paste, count: usize) {
-    let Some(values) = editor.registers.read(register, editor) else { return };
+    let Some(values) = editor.registers.read(register, editor) else {
+        return;
+    };
     let values: Vec<_> = values.map(|value| value.to_string()).collect();
 
     let (view, doc) = current!(editor);
@@ -5545,12 +5617,18 @@ fn shell(cx: &mut compositor::Context, cmd: &str, behavior: &ShellBehavior) {
         };
 
         // These `usize`s cannot underflow because selection ranges cannot overlap.
-        // Once the MSRV is 1.66.0 (mixed_integer_ops is stabilized), we can use checked
-        // arithmetic to assert this.
-        let anchor = (to as isize + offset - deleted_len as isize) as usize;
+        let anchor = to
+            .checked_add_signed(offset)
+            .expect("Selection ranges cannot overlap")
+            .checked_sub(deleted_len)
+            .expect("Selection ranges cannot overlap");
         let new_range = Range::new(anchor, anchor + output_len).with_direction(range.direction());
         ranges.push(new_range);
-        offset = offset + output_len as isize - deleted_len as isize;
+        offset = offset
+            .checked_add_unsigned(output_len)
+            .expect("Selection ranges cannot overlap")
+            .checked_sub_unsigned(deleted_len)
+            .expect("Selection ranges cannot overlap");
 
         changes.push((from, to, Some(output)));
     }

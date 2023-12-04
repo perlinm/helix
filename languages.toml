@@ -47,6 +47,7 @@ mint = { command = "mint", args = ["ls"] }
 nil = { command = "nil" }
 nimlangserver = { command = "nimlangserver" }
 nls = { command = "nls" }
+nu-lsp = { command = "nu", args = [ "--lsp" ] }
 ocamllsp = { command = "ocamllsp" }
 ols = { command = "ols", args = [] }
 omnisharp = { command = "OmniSharp", args = [ "--languageserver" ] }
@@ -696,7 +697,7 @@ indent = { tab-width = 4, unit = "    " }
 
 [[grammar]]
 name = "python"
-source = { git = "https://github.com/tree-sitter/tree-sitter-python", rev = "de221eccf9a221f5b85474a553474a69b4b5784d" }
+source = { git = "https://github.com/tree-sitter/tree-sitter-python", rev = "4bfdd9033a2225cc95032ce77066b7aeca9e2efc" }
 
 [[language]]
 name = "nickel"
@@ -1522,7 +1523,7 @@ indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
 name = "rescript"
-source = { git = "https://github.com/jaredramirez/tree-sitter-rescript", rev = "65609807c628477f3b94052e7ef895885ac51c3c" }
+source = { git = "https://github.com/jaredramirez/tree-sitter-rescript", rev = "467dcf99f68c47823d7b378779a6b282d7ef9782" }
 
 [[language]]
 name = "erlang"
@@ -1783,6 +1784,7 @@ file-types = ["nu"]
 shebangs = ["nu"]
 comment-token = "#"
 indent = { tab-width = 2, unit = "  " }
+language-servers = [ "nu-lsp" ]
 
 [[grammar]]
 name = "nu"
@@ -2301,7 +2303,8 @@ file-types = [
   "xliff",
   "xpdl",
   "xul",
-  "xoml"
+  "xoml",
+  "musicxml"
 ]
 indent = { tab-width = 2, unit = "  " }
 
@@ -2914,7 +2917,7 @@ file-types = ["gmi"]
 
 [[grammar]]
 name = "gemini"
-source = { git = "https://git.sr.ht/~sfr/tree-sitter-gemini", rev = "3cc5e4bdf572d5df4277fc2e54d6299bd59a54b3" }
+source = { git = "https://git.sr.ht/~nbsp/tree-sitter-gemini", rev = "3cc5e4bdf572d5df4277fc2e54d6299bd59a54b3" }
 
 [[language]]
 name = "templ"
@@ -2928,3 +2931,24 @@ language-servers = [ "templ" ]
 [[grammar]]
 name = "templ"
 source = { git = "https://github.com/vrischmann/tree-sitter-templ", rev = "ea56ac0655243490a4929a988f4eaa91dfccc995" }
+
+[[language]]
+name = "dbml"
+scope = "source.dbml"
+injection-regex = "dbml"
+file-types = ["dbml"]
+comment-token = ";"
+indent = { tab-width = 2, unit = "  " }
+
+[[grammar]]
+name = "dbml"
+source = { git = "https://github.com/dynamotn/tree-sitter-dbml", rev = "2e2fa5640268c33c3d3f27f7e676f631a9c68fd9" }
+
+[[language]]
+name = "log"
+scope = "source.log"
+file-types = ["log"]
+
+[[grammar]]
+name = "log"
+source = { git = "https://github.com/Tudyx/tree-sitter-log", rev = "62cfe307e942af3417171243b599cc7deac5eab9" }

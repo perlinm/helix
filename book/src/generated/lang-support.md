@@ -24,6 +24,7 @@
 | cue | ✓ |  |  | `cuelsp` |
 | d | ✓ | ✓ | ✓ | `serve-d` |
 | dart | ✓ |  | ✓ | `dart` |
+| dbml | ✓ |  |  |  |
 | devicetree | ✓ |  |  |  |
 | dhall | ✓ | ✓ |  | `dhall-lsp-server` |
 | diff | ✓ |  |  |  |
@@ -90,6 +91,7 @@
 | llvm | ✓ | ✓ | ✓ |  |
 | llvm-mir | ✓ | ✓ | ✓ |  |
 | llvm-mir-yaml | ✓ |  | ✓ |  |
+| log | ✓ |  |  |  |
 | lpf | ✓ |  |  |  |
 | lua | ✓ | ✓ | ✓ | `lua-language-server` |
 | make | ✓ |  |  |  |
@@ -105,7 +107,7 @@
 | nickel | ✓ |  | ✓ | `nls` |
 | nim | ✓ | ✓ | ✓ | `nimlangserver` |
 | nix | ✓ |  |  | `nil` |
-| nu | ✓ |  |  |  |
+| nu | ✓ |  |  | `nu` |
 | nunjucks | ✓ |  |  |  |
 | ocaml | ✓ |  | ✓ | `ocamllsp` |
 | ocaml-interface | ✓ |  |  | `ocamllsp` |
