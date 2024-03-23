@@ -2233,7 +2233,7 @@ fn global_search(cx: &mut Context) {
 
     let config = cx.editor.config();
     let smart_case = config.search.smart_case;
-    let file_picker_config = config.file_picker.clone();
+    let file_picker_config = config.file_picker;
 
     let reg = cx.register.unwrap_or('/');
     let completions = search_completions(cx, Some(reg));
