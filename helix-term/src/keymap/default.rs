@@ -58,6 +58,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "k" => move_line_up,
             "j" => move_line_down,
             "." => goto_last_modification,
+            "w" => goto_word,
         },
         ":" => command_mode,
 
@@ -178,8 +179,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "esc" => normal_mode,
         "C-b" | "pageup" => page_up,
         "C-f" | "pagedown" => page_down,
-        "C-u" => half_page_up,
-        "C-d" => half_page_down,
+        "C-u" => page_cursor_half_up,
+        "C-d" => page_cursor_half_down,
 
         "C-w" => { "Window"
             "C-w" | "w" => rotate_view,
@@ -276,6 +277,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "k" => hover,
             "r" => rename_symbol,
             "h" => select_references_to_symbol_under_cursor,
+            "c" => toggle_comments,
+            "C" => toggle_block_comments,
+            "A-c" => toggle_line_comments,
             "?" => command_palette,
         },
         "z" => { "View"
@@ -287,8 +291,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "j" | "down" => scroll_down,
             "C-b" | "pageup" => page_up,
             "C-f" | "pagedown" => page_down,
-            "C-u" | "backspace" => half_page_up,
-            "C-d" | "space" => half_page_down,
+            "C-u" | "backspace" => page_cursor_half_up,
+            "C-d" | "space" => page_cursor_half_down,
 
             "/" => search,
             "?" => rsearch,
@@ -304,8 +308,8 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "j" | "down" => scroll_down,
             "C-b" | "pageup" => page_up,
             "C-f" | "pagedown" => page_down,
-            "C-u" | "backspace" => half_page_up,
-            "C-d" | "space" => half_page_down,
+            "C-u" | "backspace" => page_cursor_half_up,
+            "C-d" | "space" => page_cursor_half_down,
 
             "/" => search,
             "?" => rsearch,
@@ -357,6 +361,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "g" => { "Goto"
             "k" => extend_line_up,
             "j" => extend_line_down,
+            "w" => extend_to_word,
         },
     }));
     let insert = keymap!({ "Insert mode"
