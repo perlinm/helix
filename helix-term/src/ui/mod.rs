@@ -178,7 +178,7 @@ pub fn walk_dir(root: &Path, config: FilePickerConfig) -> impl Iterator<Item = P
     let dedup_symlinks = config.deduplicate_links;
     let absolute_root = root.canonicalize().unwrap_or_else(|_| root.to_owned());
 
-    let mut walk_builder = WalkBuilder::new(root);
+    let mut walk_builder = WalkBuilder::new(&root);
     walk_builder
         .hidden(config.hidden)
         .parents(config.parents)
@@ -207,14 +207,15 @@ pub fn walk_dir(root: &Path, config: FilePickerConfig) -> impl Iterator<Item = P
         .build()
         .expect("failed to build excluded_types");
     walk_builder.types(excluded_types);
-
-    walk_builder.build().filter_map(|entry| {
+    let files = walk_builder.build().filter_map(|entry| {
         let entry = entry.ok()?;
         if !entry.file_type()?.is_file() {
             return None;
         }
         Some(entry.into_path())
-    })
+    });
+
+    files
 }
 
 pub fn inject_files(

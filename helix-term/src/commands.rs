@@ -3053,6 +3053,7 @@ fn changed_file_picker(cx: &mut Context) {
 
     impl Item for FileChange {
         type Data = FileChangeData;
+        type Config = ();
 
         fn format(&self, data: &Self::Data) -> Row {
             let process_path = |path: &PathBuf| {
@@ -3092,6 +3093,7 @@ fn changed_file_picker(cx: &mut Context) {
     let renamed = cx.editor.theme.get("diff.delta.moved");
 
     let picker = Picker::new(
+        (),
         Vec::new(),
         FileChangeData {
             cwd: cwd.clone(),

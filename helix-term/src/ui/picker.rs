@@ -822,7 +822,7 @@ impl Picker<PathBuf> {
         self.editor_data = root;
         let files = walk_dir(&self.editor_data, self.config);
         self.matcher.restart(true);
-        inject_files(self, files);
+        inject_files(&self, files);
         self.cursor = 0;
     }
 
