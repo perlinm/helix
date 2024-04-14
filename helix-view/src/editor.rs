@@ -212,6 +212,14 @@ impl Default for FilePickerConfig {
     }
 }
 
+fn serialize_alphabet<S>(alphabet: &[char], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let alphabet: String = alphabet.iter().collect();
+    serializer.serialize_str(&alphabet)
+}
+
 fn deserialize_alphabet<'de, D>(deserializer: D) -> Result<Vec<char>, D::Error>
 where
     D: Deserializer<'de>,
@@ -323,7 +331,10 @@ pub struct Config {
     #[serde(default)]
     pub indent_heuristic: IndentationHeuristic,
     /// labels characters used in jumpmode
-    #[serde(skip_serializing, deserialize_with = "deserialize_alphabet")]
+    #[serde(
+        serialize_with = "serialize_alphabet",
+        deserialize_with = "deserialize_alphabet"
+    )]
     pub jump_label_alphabet: Vec<char>,
 }
 
@@ -702,6 +713,7 @@ pub enum WhitespaceRender {
         default: Option<WhitespaceRenderValue>,
         space: Option<WhitespaceRenderValue>,
         nbsp: Option<WhitespaceRenderValue>,
+        nnbsp: Option<WhitespaceRenderValue>,
         tab: Option<WhitespaceRenderValue>,
         newline: Option<WhitespaceRenderValue>,
     },
@@ -733,6 +745,14 @@ impl WhitespaceRender {
             }
         }
     }
+    pub fn nnbsp(&self) -> WhitespaceRenderValue {
+        match *self {
+            Self::Basic(val) => val,
+            Self::Specific { default, nnbsp, .. } => {
+                nnbsp.or(default).unwrap_or(WhitespaceRenderValue::None)
+            }
+        }
+    }
     pub fn tab(&self) -> WhitespaceRenderValue {
         match *self {
             Self::Basic(val) => val,
@@ -756,6 +776,7 @@ impl WhitespaceRender {
 pub struct WhitespaceCharacters {
     pub space: char,
     pub nbsp: char,
+    pub nnbsp: char,
     pub tab: char,
     pub tabpad: char,
     pub newline: char,
@@ -766,6 +787,7 @@ impl Default for WhitespaceCharacters {
         Self {
             space: '·',   // U+00B7
             nbsp: '⍽',    // U+237D
+            nnbsp: '␣',   // U+2423
             tab: '→',     // U+2192
             newline: '⏎', // U+23CE
             tabpad: ' ',
