@@ -184,14 +184,14 @@ pub fn raw_regex_prompt(
 
 type FilePicker = Picker<PathBuf, PathBuf>;
 
-pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePicker {
+pub fn walk_dir(
+    root: &std::path::Path,
+    config: &helix_view::editor::Config,
+) -> impl Iterator<Item = PathBuf> {
     use ignore::{types::TypesBuilder, WalkBuilder};
-    use std::time::Instant;
-
-    let now = Instant::now();
 
     let dedup_symlinks = config.file_picker.deduplicate_links;
-    let absolute_root = root.canonicalize().unwrap_or_else(|_| root.clone());
+    let absolute_root = root.canonicalize().unwrap_or_else(|_| root.to_owned());
 
     let mut walk_builder = WalkBuilder::new(&root);
     walk_builder
@@ -222,35 +222,19 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
         .build()
         .expect("failed to build excluded_types");
     walk_builder.types(excluded_types);
-    let mut files = walk_builder.build().filter_map(|entry| {
+    walk_builder.build().filter_map(|entry| {
         let entry = entry.ok()?;
         if !entry.file_type()?.is_file() {
             return None;
         }
         Some(entry.into_path())
-    });
-    log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
-
-    let columns = [PickerColumn::new(
-        "path",
-        |item: &PathBuf, root: &PathBuf| {
-            item.strip_prefix(root)
-                .unwrap_or(item)
-                .to_string_lossy()
-                .into()
-        },
-    )];
-    let picker = Picker::new(columns, 0, [], root, move |cx, path: &PathBuf, action| {
-        if let Err(e) = cx.editor.open(path, action) {
-            let err = if let Some(err) = e.source() {
-                format!("{}", err)
-            } else {
-                format!("unable to open \"{}\"", path.display())
-            };
-            cx.editor.set_error(err);
-        }
     })
-    .with_preview(|_editor, path| Some((path.as_path().into(), None)));
+}
+
+pub fn inject_files(
+    picker: &Picker<PathBuf, PathBuf>,
+    mut files: impl Iterator<Item = PathBuf> + Send + 'static,
+) {
     let injector = picker.injector();
     let timeout = std::time::Instant::now() + std::time::Duration::from_millis(30);
 
@@ -273,6 +257,36 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
             }
         });
     }
+}
+
+pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePicker {
+    use std::time::Instant;
+
+    let now = Instant::now();
+    let files = walk_dir(&root, config);
+    log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
+
+    let columns = [PickerColumn::new(
+        "path",
+        |item: &PathBuf, root: &PathBuf| {
+            item.strip_prefix(root)
+                .unwrap_or(item)
+                .to_string_lossy()
+                .into()
+        },
+    )];
+    let picker = Picker::new(columns, 0, [], root, move |cx, path: &PathBuf, action| {
+        if let Err(e) = cx.editor.open(path, action) {
+            let err = if let Some(err) = e.source() {
+                format!("{}", err)
+            } else {
+                format!("unable to open \"{}\"", path.display())
+            };
+            cx.editor.set_error(err);
+        }
+    })
+    .with_preview(|_editor, path| Some((path.as_path().into(), None)));
+    inject_files(&picker, files);
     picker
 }
 
