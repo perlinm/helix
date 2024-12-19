@@ -201,6 +201,9 @@ enum DiagnosticsFormat {
 }
 
 type DiagnosticsPicker = Picker<PickerDiagnostic, DiagnosticStyles>;
+impl ui::picker::PickerNavigation for Picker<PickerDiagnostic, DiagnosticStyles> {}
+impl ui::picker::PickerNavigation for Picker<SymbolInformationItem, ()> {}
+impl ui::picker::PickerNavigation for Picker<Location, std::path::PathBuf> {}
 
 fn diag_picker(
     cx: &Context,

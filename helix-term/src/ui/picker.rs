@@ -932,7 +932,10 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
     }
 }
 
-impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I, D> {
+impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I, D>
+where
+    Picker<I, D>: PickerNavigation,
+{
     fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
         // +---------+ +---------+
         // |prompt   | |preview  |
@@ -1059,6 +1062,12 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
             ctrl!('t') => {
                 self.toggle_preview();
             }
+            ctrl!('i') => {
+                self.goto_child(ctx);
+            }
+            ctrl!('o') => {
+                self.goto_parent(ctx);
+            }
             _ => {
                 self.prompt_handle_event(event, ctx);
             }
@@ -1095,3 +1104,45 @@ impl<T: 'static + Send + Sync, D> Drop for Picker<T, D> {
 }
 
 type PickerCallback<T> = Box<dyn Fn(&mut Context, &T, Action)>;
+
+pub trait PickerNavigation {
+    fn change_root(&mut self, _root: Arc<std::path::PathBuf>, _cx: &mut Context) {}
+    fn goto_parent(&mut self, _cx: &mut Context) {}
+    fn goto_child(&mut self, _cx: &mut Context) {}
+}
+
+impl PickerNavigation for Picker<std::path::PathBuf, std::path::PathBuf> {
+    fn change_root(&mut self, root: Arc<std::path::PathBuf>, cx: &mut Context) {
+        self.editor_data = root;
+        let files = ui::walk_dir(&self.editor_data, &cx.editor.config());
+        self.matcher.restart(true);
+        ui::inject_files(&*self, files);
+        self.cursor = 0;
+    }
+
+    fn goto_parent(&mut self, cx: &mut Context) {
+        if let Some(parent) = &self.editor_data.parent() {
+            self.change_root(Arc::new(parent.to_path_buf()), cx);
+        }
+    }
+
+    fn goto_child(&mut self, cx: &mut Context) {
+        use std::ops::Deref;
+
+        if let Some(selection) = self.selection() {
+            let component = selection
+                .strip_prefix(&*self.editor_data)
+                .ok()
+                .map(Path::components)
+                .and_then(|mut iter| iter.next());
+            if let Some(comp) = component {
+                let mut child = self.editor_data.deref().clone();
+                child.push(comp);
+                if child.is_dir() {
+                    self.prompt.clear(cx.editor);
+                    self.change_root(Arc::new(child), cx);
+                }
+            }
+        }
+    }
+}
