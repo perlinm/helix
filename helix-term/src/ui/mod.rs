@@ -235,7 +235,7 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
     log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
 
     let columns = [PickerColumn::new(
-        "path",
+        root.to_string_lossy(),
         |item: &PathBuf, root: &PathBuf| {
             item.strip_prefix(root)
                 .unwrap_or(item)
@@ -253,6 +253,7 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
             cx.editor.set_error(err);
         }
     })
+    .always_show_headers()
     .with_preview(|_editor, path| Some((path.as_path().into(), None)));
     let injector = picker.injector();
     let timeout = std::time::Instant::now() + std::time::Duration::from_millis(30);
@@ -286,7 +287,7 @@ pub fn file_explorer(root: PathBuf, editor: &Editor) -> Result<FileExplorer, std
     let directory_content = directory_content(&root)?;
 
     let columns = [PickerColumn::new(
-        "path",
+        root.to_string_lossy(),
         |(path, is_dir): &(PathBuf, bool), (root, directory_style): &(PathBuf, Style)| {
             let name = path.strip_prefix(root).unwrap_or(path).to_string_lossy();
             if *is_dir {
@@ -324,6 +325,7 @@ pub fn file_explorer(root: PathBuf, editor: &Editor) -> Result<FileExplorer, std
             }
         },
     )
+    .always_show_headers()
     .with_preview(|_editor, (path, _is_dir)| Some((path.as_path().into(), None)));
 
     Ok(picker)
