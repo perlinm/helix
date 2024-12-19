@@ -986,7 +986,10 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
     }
 }
 
-impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I, D> {
+impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I, D>
+where
+    Picker<I, D>: PickerNavigation,
+{
     fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
         // +---------+ +---------+
         // |prompt   | |preview  |
@@ -1113,6 +1116,16 @@ impl<I: 'static + Send + Sync, D: 'static + Send + Sync> Component for Picker<I,
             ctrl!('t') => {
                 self.toggle_preview();
             }
+            ctrl!('i') => {
+                if self.open_child(ctx) {
+                    return close_fn(self);
+                }
+            }
+            ctrl!('o') => {
+                if self.open_parent(ctx) {
+                    return close_fn(self);
+                }
+            }
             _ => {
                 self.prompt_handle_event(event, ctx);
             }
@@ -1157,3 +1170,58 @@ impl<T: 'static + Send + Sync, D> Drop for Picker<T, D> {
 }
 
 type PickerCallback<T> = Box<dyn Fn(&mut Context, &T, Action)>;
+
+pub trait PickerNavigation {
+    fn open_at_root(&mut self, _root: std::path::PathBuf, _cx: &mut Context) {}
+    fn open_parent(&mut self, _cx: &mut Context) -> bool {
+        false
+    }
+    fn open_child(&mut self, _cx: &mut Context) -> bool {
+        false
+    }
+}
+
+impl PickerNavigation for Picker<std::path::PathBuf, std::path::PathBuf> {
+    fn open_at_root(&mut self, root: std::path::PathBuf, cx: &mut Context) {
+        let callback = Box::pin(async move {
+            let call =
+                crate::job::Callback::EditorCompositor(Box::new(move |editor, compositor| {
+                    let picker = super::file_picker(root, &editor.config());
+                    compositor.push(Box::new(ui::overlay::overlaid(picker)));
+                }));
+            Ok(call)
+        });
+        cx.jobs.callback(callback);
+    }
+
+    fn open_parent(&mut self, cx: &mut Context) -> bool {
+        if let Some(parent) = &self.editor_data.parent() {
+            self.open_at_root(parent.to_path_buf(), cx);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn open_child(&mut self, cx: &mut Context) -> bool {
+        use std::ops::Deref;
+
+        if let Some(selection) = self.selection() {
+            let component = selection
+                .strip_prefix(&*self.editor_data)
+                .ok()
+                .map(Path::components)
+                .and_then(|mut iter| iter.next());
+            if let Some(comp) = component {
+                let mut child = self.editor_data.deref().clone();
+                child.push(comp);
+                if child.is_dir() {
+                    self.prompt.clear(cx.editor);
+                    self.open_at_root(child, cx);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}

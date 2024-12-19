@@ -86,6 +86,8 @@ use grep_regex::RegexMatcherBuilder;
 use grep_searcher::{sinks, BinaryDetection, SearcherBuilder};
 use ignore::{DirEntry, WalkBuilder, WalkState};
 
+impl ui::picker::PickerNavigation for Picker<MappableCommand, HashMap<String, Vec<Vec<KeyEvent>>>> {}
+
 pub type OnKeyCallback = Box<dyn FnOnce(&mut Context, KeyEvent)>;
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum OnKeyCallbackKind {
@@ -2406,6 +2408,8 @@ fn global_search(cx: &mut Context) {
         file_picker_config: helix_view::editor::FilePickerConfig,
     }
 
+    impl ui::picker::PickerNavigation for Picker<FileResult, GlobalSearchConfig> {}
+
     let config = cx.editor.config();
     let config = GlobalSearchConfig {
         smart_case: config.search.smart_case,
@@ -3006,6 +3010,7 @@ fn file_picker_in_current_directory(cx: &mut Context) {
     cx.push_layer(Box::new(overlaid(picker)));
 }
 
+impl ui::picker::PickerNavigation for Picker<(PathBuf, bool), (PathBuf, Style)> {}
 fn file_explorer(cx: &mut Context) {
     let root = find_workspace().0;
     if !root.exists() {
@@ -3068,6 +3073,8 @@ fn buffer_picker(cx: &mut Context) {
         is_current: bool,
         focused_at: std::time::Instant,
     }
+
+    impl ui::picker::PickerNavigation for Picker<BufferMeta, ()> {}
 
     let new_meta = |doc: &Document| BufferMeta {
         id: doc.id(),
@@ -3133,6 +3140,7 @@ fn jumplist_picker(cx: &mut Context) {
         text: String,
         is_current: bool,
     }
+    impl ui::picker::PickerNavigation for Picker<JumpMeta, ()> {}
 
     for (view, _) in cx.editor.tree.views_mut() {
         for doc_id in view.jumps.iter().map(|e| e.0).collect::<Vec<_>>().iter() {
@@ -3225,6 +3233,7 @@ fn changed_file_picker(cx: &mut Context) {
         style_deleted: Style,
         style_renamed: Style,
     }
+    impl ui::picker::PickerNavigation for Picker<FileChange, FileChangeData> {}
 
     let cwd = helix_stdx::env::current_working_dir();
     if !cwd.exists() {

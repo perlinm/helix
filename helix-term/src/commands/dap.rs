@@ -21,6 +21,9 @@ use std::path::PathBuf;
 use anyhow::{anyhow, bail};
 
 use helix_view::handlers::dap::{breakpoints_changed, jump_to_stack_frame, select_thread_id};
+impl ui::picker::PickerNavigation for Picker<Thread, HashMap<helix_dap::ThreadId, String>> {}
+impl ui::picker::PickerNavigation for Picker<DebugTemplate, ()> {}
+impl ui::picker::PickerNavigation for Picker<StackFrame, ()> {}
 
 fn thread_picker(
     cx: &mut Context,
