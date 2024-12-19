@@ -259,6 +259,20 @@ pub fn inject_files(
     }
 }
 
+pub fn file_picker_columns(
+    root: &std::path::Path,
+) -> impl IntoIterator<Item = PickerColumn<PathBuf, PathBuf>> {
+    [PickerColumn::new(
+        format!("root: {}", root.to_string_lossy()),
+        |item: &PathBuf, root: &PathBuf| {
+            item.strip_prefix(root)
+                .unwrap_or(item)
+                .to_string_lossy()
+                .into()
+        },
+    )]
+}
+
 pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePicker {
     use std::time::Instant;
 
@@ -266,26 +280,24 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
     let files = walk_dir(&root, config);
     log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
 
-    let columns = [PickerColumn::new(
-        "path",
-        |item: &PathBuf, root: &PathBuf| {
-            item.strip_prefix(root)
-                .unwrap_or(item)
-                .to_string_lossy()
-                .into()
+    let picker = Picker::new(
+        file_picker_columns(&root),
+        0,
+        [],
+        root,
+        move |cx, path: &PathBuf, action| {
+            if let Err(e) = cx.editor.open(path, action) {
+                let err = if let Some(err) = e.source() {
+                    format!("{}", err)
+                } else {
+                    format!("unable to open \"{}\"", path.display())
+                };
+                cx.editor.set_error(err);
+            }
         },
-    )];
-    let picker = Picker::new(columns, 0, [], root, move |cx, path: &PathBuf, action| {
-        if let Err(e) = cx.editor.open(path, action) {
-            let err = if let Some(err) = e.source() {
-                format!("{}", err)
-            } else {
-                format!("unable to open \"{}\"", path.display())
-            };
-            cx.editor.set_error(err);
-        }
-    })
-    .with_preview(|_editor, path| Some((path.as_path().into(), None)));
+    )
+    .with_preview(|_editor, path| Some((path.as_path().into(), None)))
+    .always_show_headers();
     inject_files(&picker, files);
     picker
 }
