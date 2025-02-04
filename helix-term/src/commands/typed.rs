@@ -192,9 +192,7 @@ fn buffer_gather_paths_impl(editor: &mut Editor, args: &[Cow<str>]) -> Vec<Docum
     for arg in args {
         let doc_id = editor.documents().find_map(|doc| {
             let arg_path = Some(Path::new(arg.as_ref()));
-            if doc.path().map(|p| p.as_path()) == arg_path
-                || doc.relative_path().as_deref() == arg_path
-            {
+            if doc.path().map(|p| p.as_path()) == arg_path || doc.relative_path() == arg_path {
                 Some(doc.id())
             } else {
                 None
@@ -656,11 +654,12 @@ fn force_write_quit(
 /// error, otherwise returns `Ok(())`. If the current document is unmodified,
 /// and there are modified documents, switches focus to one of them.
 pub(super) fn buffers_remaining_impl(editor: &mut Editor) -> anyhow::Result<()> {
-    let (modified_ids, modified_names): (Vec<_>, Vec<_>) = editor
+    let modified_ids: Vec<_> = editor
         .documents()
         .filter(|doc| doc.is_modified())
-        .map(|doc| (doc.id(), doc.display_name()))
-        .unzip();
+        .map(|doc| doc.id())
+        .collect();
+
     if let Some(first) = modified_ids.first() {
         let current = doc!(editor);
         // If the current document is unmodified, and there are modified
@@ -668,6 +667,12 @@ pub(super) fn buffers_remaining_impl(editor: &mut Editor) -> anyhow::Result<()> 
         if !modified_ids.contains(&current.id()) {
             editor.switch(*first, Action::Replace);
         }
+
+        let modified_names: Vec<_> = modified_ids
+            .iter()
+            .map(|doc_id| doc!(editor, doc_id).display_name())
+            .collect();
+
         bail!(
             "{} unsaved buffer{} remaining: {:?}",
             modified_names.len(),
@@ -1098,14 +1103,19 @@ fn change_current_directory(
     let dir = match args.first().map(AsRef::as_ref) {
         Some("-") => cx
             .editor
-            .last_cwd
-            .clone()
-            .ok_or(anyhow!("No previous working directory"))?,
-        Some(input_path) => helix_stdx::path::expand_tilde(Path::new(input_path)).to_path_buf(),
-        None => home_dir()?,
+            .get_last_cwd()
+            .map(|path| Cow::Owned(path.to_path_buf()))
+            .ok_or_else(|| anyhow!("No previous working directory"))?,
+        Some(path) => helix_stdx::path::expand_tilde(Path::new(path)),
+        None => Cow::Owned(home_dir()?),
     };
 
-    cx.editor.last_cwd = helix_stdx::env::set_current_working_dir(dir)?;
+    cx.editor.set_cwd(&dir).map_err(|err| {
+        anyhow!(
+            "Could not change working directory to '{}': {err}",
+            dir.display()
+        )
+    })?;
 
     cx.editor.set_status(format!(
         "Current working directory is now {}",
@@ -1471,9 +1481,34 @@ fn lsp_workspace_command(
     Ok(())
 }
 
+/// Returns all language servers used by the current document if no servers are supplied
+/// If servers are supplied, do a check to make sure that all of the servers exist
+fn valid_lang_servers(doc: &Document, servers: &[Cow<str>]) -> anyhow::Result<Vec<String>> {
+    let valid_ls_names = doc
+        .language_servers()
+        .map(|ls| ls.name().to_string())
+        .collect();
+
+    if servers.is_empty() {
+        Ok(valid_ls_names)
+    } else {
+        let (valid, invalid): (Vec<_>, Vec<_>) = servers
+            .iter()
+            .map(|m| m.to_string())
+            .partition(|ls| valid_ls_names.contains(ls));
+
+        if !invalid.is_empty() {
+            let s = if invalid.len() == 1 { "" } else { "s" };
+            bail!("Unknown language server{s}: {}", invalid.join(", "));
+        };
+
+        Ok(valid)
+    }
+}
+
 fn lsp_restart(
     cx: &mut compositor::Context,
-    _args: &[Cow<str>],
+    args: &[Cow<str>],
     event: PromptEvent,
 ) -> anyhow::Result<()> {
     if event != PromptEvent::Validate {
@@ -1481,17 +1516,25 @@ fn lsp_restart(
     }
 
     let editor_config = cx.editor.config.load();
-    let (_view, doc) = current!(cx.editor);
+    let doc = doc!(cx.editor);
     let config = doc
         .language_config()
         .context("LSP not defined for the current document")?;
 
-    cx.editor.language_servers.restart(
-        config,
-        doc.path(),
-        &editor_config.workspace_lsp_roots,
-        editor_config.lsp.snippets,
-    )?;
+    let ls_restart_names = valid_lang_servers(doc, args)?;
+
+    for server in ls_restart_names.iter() {
+        cx.editor
+            .language_servers
+            .restart_server(
+                server,
+                config,
+                doc.path(),
+                &editor_config.workspace_lsp_roots,
+                editor_config.lsp.snippets,
+            )
+            .transpose()?;
+    }
 
     // This collect is needed because refresh_language_server would need to re-borrow editor.
     let document_ids_to_refresh: Vec<DocumentId> = cx
@@ -1500,10 +1543,9 @@ fn lsp_restart(
         .filter_map(|doc| match doc.language_config() {
             Some(config)
                 if config.language_servers.iter().any(|ls| {
-                    config
-                        .language_servers
+                    ls_restart_names
                         .iter()
-                        .any(|restarted_ls| restarted_ls.name == ls.name)
+                        .any(|restarted_ls| restarted_ls == &ls.name)
                 }) =>
             {
                 Some(doc.id())
@@ -1521,17 +1563,15 @@ fn lsp_restart(
 
 fn lsp_stop(
     cx: &mut compositor::Context,
-    _args: &[Cow<str>],
+    args: &[Cow<str>],
     event: PromptEvent,
 ) -> anyhow::Result<()> {
     if event != PromptEvent::Validate {
         return Ok(());
     }
+    let doc = doc!(cx.editor);
 
-    let ls_shutdown_names = doc!(cx.editor)
-        .language_servers()
-        .map(|ls| ls.name().to_string())
-        .collect::<Vec<_>>();
+    let ls_shutdown_names = valid_lang_servers(doc, args)?;
 
     for ls_name in &ls_shutdown_names {
         cx.editor.language_servers.stop(ls_name);
@@ -2080,6 +2120,10 @@ fn sort_impl(
     let text = doc.text().slice(..);
 
     let selection = doc.selection(view.id);
+
+    if selection.len() == 1 {
+        bail!("Sorting requires multiple selections. Hint: split selection first");
+    }
 
     let mut fragments: Vec<_> = selection
         .slices(text)
@@ -2905,16 +2949,16 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand {
         name: "lsp-restart",
         aliases: &[],
-        doc: "Restarts the language servers used by the current doc",
+        doc: "Restarts the given language servers, or all language servers that are used by the current file if no arguments are supplied",
         fun: lsp_restart,
-        signature: CommandSignature::none(),
+        signature: CommandSignature::all(completers::language_servers),
     },
     TypableCommand {
         name: "lsp-stop",
         aliases: &[],
-        doc: "Stops the language servers that are used by the current doc",
+        doc: "Stops the given language servers, or all language servers that are used by the current file if no arguments are supplied",
         fun: lsp_stop,
-        signature: CommandSignature::none(),
+        signature: CommandSignature::all(completers::language_servers),
     },
     TypableCommand {
         name: "tree-sitter-scopes",

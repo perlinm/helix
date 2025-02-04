@@ -8,7 +8,7 @@ pub mod menu;
 pub mod overlay;
 pub mod picker;
 pub mod popup;
-mod prompt;
+pub mod prompt;
 mod spinner;
 mod statusline;
 mod text;
@@ -20,6 +20,7 @@ use crate::job::{self, Callback};
 pub use completion::Completion;
 pub use editor::EditorView;
 use helix_stdx::rope;
+use helix_view::theme::Style;
 pub use markdown::Markdown;
 pub use menu::Menu;
 pub use picker::{Column as PickerColumn, FileLocation, Picker};
@@ -29,7 +30,9 @@ pub use spinner::{ProgressSpinners, Spinner};
 pub use text::Text;
 
 use helix_view::Editor;
+use tui::text::Span;
 
+use std::path::Path;
 use std::{error::Error, path::PathBuf};
 
 struct Utf8PathBuf {
@@ -184,14 +187,14 @@ pub fn raw_regex_prompt(
 
 type FilePicker = Picker<PathBuf, PathBuf>;
 
-pub fn walk_dir(
-    root: &std::path::Path,
-    config: &helix_view::editor::Config,
-) -> impl Iterator<Item = PathBuf> {
+pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePicker {
     use ignore::{types::TypesBuilder, WalkBuilder};
+    use std::time::Instant;
+
+    let now = Instant::now();
 
     let dedup_symlinks = config.file_picker.deduplicate_links;
-    let absolute_root = root.canonicalize().unwrap_or_else(|_| root.to_owned());
+    let absolute_root = root.canonicalize().unwrap_or_else(|_| root.clone());
 
     let mut walk_builder = WalkBuilder::new(&root);
     walk_builder
@@ -222,19 +225,36 @@ pub fn walk_dir(
         .build()
         .expect("failed to build excluded_types");
     walk_builder.types(excluded_types);
-    walk_builder.build().filter_map(|entry| {
+    let mut files = walk_builder.build().filter_map(|entry| {
         let entry = entry.ok()?;
         if !entry.file_type()?.is_file() {
             return None;
         }
         Some(entry.into_path())
-    })
-}
+    });
+    log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
 
-pub fn inject_files(
-    picker: &Picker<PathBuf, PathBuf>,
-    mut files: impl Iterator<Item = PathBuf> + Send + 'static,
-) {
+    let columns = [PickerColumn::new(
+        root.to_string_lossy(),
+        |item: &PathBuf, root: &PathBuf| {
+            item.strip_prefix(root)
+                .unwrap_or(item)
+                .to_string_lossy()
+                .into()
+        },
+    )];
+    let picker = Picker::new(columns, 0, [], root, move |cx, path: &PathBuf, action| {
+        if let Err(e) = cx.editor.open(path, action) {
+            let err = if let Some(err) = e.source() {
+                format!("{}", err)
+            } else {
+                format!("unable to open \"{}\"", path.display())
+            };
+            cx.editor.set_error(err);
+        }
+    })
+    .always_show_headers()
+    .with_preview(|_editor, path| Some((path.as_path().into(), None)));
     let injector = picker.injector();
     let timeout = std::time::Instant::now() + std::time::Duration::from_millis(30);
 
@@ -257,36 +277,45 @@ pub fn inject_files(
             }
         });
     }
+    picker
 }
 
-pub fn file_picker_columns(
-    root: &std::path::Path,
-) -> impl IntoIterator<Item = PickerColumn<PathBuf, PathBuf>> {
-    [PickerColumn::new(
-        format!("root: {}", root.to_string_lossy()),
-        |item: &PathBuf, root: &PathBuf| {
-            item.strip_prefix(root)
-                .unwrap_or(item)
-                .to_string_lossy()
-                .into()
+type FileExplorer = Picker<(PathBuf, bool), (PathBuf, Style)>;
+
+pub fn file_explorer(root: PathBuf, editor: &Editor) -> Result<FileExplorer, std::io::Error> {
+    let directory_style = editor.theme.get("ui.text.directory");
+    let directory_content = directory_content(&root)?;
+
+    let columns = [PickerColumn::new(
+        root.to_string_lossy(),
+        |(path, is_dir): &(PathBuf, bool), (root, directory_style): &(PathBuf, Style)| {
+            let name = path.strip_prefix(root).unwrap_or(path).to_string_lossy();
+            if *is_dir {
+                Span::styled(format!("{}/", name), *directory_style).into()
+            } else {
+                name.into()
+            }
         },
-    )]
-}
-
-pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePicker {
-    use std::time::Instant;
-
-    let now = Instant::now();
-    let files = walk_dir(&root, config);
-    log::debug!("file_picker init {:?}", Instant::now().duration_since(now));
-
+    )];
     let picker = Picker::new(
-        file_picker_columns(&root),
+        columns,
         0,
-        [],
-        root,
-        move |cx, path: &PathBuf, action| {
-            if let Err(e) = cx.editor.open(path, action) {
+        directory_content,
+        (root, directory_style),
+        move |cx, (path, is_dir): &(PathBuf, bool), action| {
+            if *is_dir {
+                let new_root = helix_stdx::path::normalize(path);
+                let callback = Box::pin(async move {
+                    let call: Callback =
+                        Callback::EditorCompositor(Box::new(move |editor, compositor| {
+                            if let Ok(picker) = file_explorer(new_root, editor) {
+                                compositor.push(Box::new(overlay::overlaid(picker)));
+                            }
+                        }));
+                    Ok(call)
+                });
+                cx.jobs.callback(callback);
+            } else if let Err(e) = cx.editor.open(path, action) {
                 let err = if let Some(err) = e.source() {
                     format!("{}", err)
                 } else {
@@ -296,10 +325,28 @@ pub fn file_picker(root: PathBuf, config: &helix_view::editor::Config) -> FilePi
             }
         },
     )
-    .with_preview(|_editor, path| Some((path.as_path().into(), None)))
-    .always_show_headers();
-    inject_files(&picker, files);
-    picker
+    .always_show_headers()
+    .with_preview(|_editor, (path, _is_dir)| Some((path.as_path().into(), None)));
+
+    Ok(picker)
+}
+
+fn directory_content(path: &Path) -> Result<Vec<(PathBuf, bool)>, std::io::Error> {
+    let mut content: Vec<_> = std::fs::read_dir(path)?
+        .flatten()
+        .map(|entry| {
+            (
+                entry.path(),
+                entry.file_type().is_ok_and(|file_type| file_type.is_dir()),
+            )
+        })
+        .collect();
+
+    content.sort_by(|(path1, is_dir1), (path2, is_dir2)| (!is_dir1, path1).cmp(&(!is_dir2, path2)));
+    if path.parent().is_some() {
+        content.insert(0, (path.join(".."), true));
+    }
+    Ok(content)
 }
 
 pub mod completers {
@@ -365,6 +412,15 @@ pub mod completers {
         }
     }
 
+    pub fn language_servers(editor: &Editor, input: &str) -> Vec<Completion> {
+        let language_servers = doc!(editor).language_servers().map(|ls| ls.name());
+
+        fuzzy_match(input, language_servers, false)
+            .into_iter()
+            .map(|(name, _)| ((0..), Span::raw(name.to_string())))
+            .collect()
+    }
+
     pub fn setting(_editor: &Editor, input: &str) -> Vec<Completion> {
         static KEYS: Lazy<Vec<String>> = Lazy::new(|| {
             let mut keys = Vec::new();
@@ -389,7 +445,7 @@ pub mod completers {
         git_ignore: bool,
     ) -> Vec<Completion> {
         filename_impl(editor, input, git_ignore, |entry| {
-            let is_dir = entry.file_type().map_or(false, |entry| entry.is_dir());
+            let is_dir = entry.file_type().is_some_and(|entry| entry.is_dir());
 
             if is_dir {
                 FileMatch::AcceptIncomplete
@@ -440,7 +496,7 @@ pub mod completers {
         git_ignore: bool,
     ) -> Vec<Completion> {
         filename_impl(editor, input, git_ignore, |entry| {
-            let is_dir = entry.file_type().map_or(false, |entry| entry.is_dir());
+            let is_dir = entry.file_type().is_some_and(|entry| entry.is_dir());
 
             if is_dir {
                 FileMatch::Accept

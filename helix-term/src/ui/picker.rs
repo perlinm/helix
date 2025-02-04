@@ -85,6 +85,7 @@ pub type FileLocation<'a> = (PathOrId<'a>, Option<(usize, usize)>);
 
 pub enum CachedPreview {
     Document(Box<Document>),
+    Directory(Vec<(String, bool)>),
     Binary,
     LargeFile,
     NotFound,
@@ -106,12 +107,20 @@ impl Preview<'_, '_> {
         }
     }
 
+    fn dir_content(&self) -> Option<&Vec<(String, bool)>> {
+        match self {
+            Preview::Cached(CachedPreview::Directory(dir_content)) => Some(dir_content),
+            _ => None,
+        }
+    }
+
     /// Alternate text to show for the preview.
     fn placeholder(&self) -> &str {
         match *self {
             Self::EditorDocument(_) => "<Invalid file location>",
             Self::Cached(preview) => match preview {
                 CachedPreview::Document(_) => "<Invalid file location>",
+                CachedPreview::Directory(_) => "<Invalid directory location>",
                 CachedPreview::Binary => "<Binary file>",
                 CachedPreview::LargeFile => "<File too large to preview>",
                 CachedPreview::NotFound => "<File not found>",
@@ -591,33 +600,58 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                 }
 
                 let path: Arc<Path> = path.into();
-                let data = std::fs::File::open(&path).and_then(|file| {
-                    let metadata = file.metadata()?;
-                    // Read up to 1kb to detect the content type
-                    let n = file.take(1024).read_to_end(&mut self.read_buffer)?;
-                    let content_type = content_inspector::inspect(&self.read_buffer[..n]);
-                    self.read_buffer.clear();
-                    Ok((metadata, content_type))
-                });
-                let preview = data
-                    .map(
-                        |(metadata, content_type)| match (metadata.len(), content_type) {
-                            (_, content_inspector::ContentType::BINARY) => CachedPreview::Binary,
-                            (size, _) if size > MAX_FILE_SIZE_FOR_PREVIEW => {
-                                CachedPreview::LargeFile
+                let preview = std::fs::metadata(&path)
+                    .and_then(|metadata| {
+                        if metadata.is_dir() {
+                            let files = super::directory_content(&path)?;
+                            let file_names: Vec<_> = files
+                                .iter()
+                                .filter_map(|(path, is_dir)| {
+                                    let name = path.file_name()?.to_string_lossy();
+                                    if *is_dir {
+                                        Some((format!("{}/", name), true))
+                                    } else {
+                                        Some((name.into_owned(), false))
+                                    }
+                                })
+                                .collect();
+                            Ok(CachedPreview::Directory(file_names))
+                        } else if metadata.is_file() {
+                            if metadata.len() > MAX_FILE_SIZE_FOR_PREVIEW {
+                                return Ok(CachedPreview::LargeFile);
                             }
-                            _ => Document::open(&path, None, None, editor.config.clone())
-                                .map(|doc| {
+                            let content_type = std::fs::File::open(&path).and_then(|file| {
+                                // Read up to 1kb to detect the content type
+                                let n = file.take(1024).read_to_end(&mut self.read_buffer)?;
+                                let content_type =
+                                    content_inspector::inspect(&self.read_buffer[..n]);
+                                self.read_buffer.clear();
+                                Ok(content_type)
+                            })?;
+                            if content_type.is_binary() {
+                                return Ok(CachedPreview::Binary);
+                            }
+                            Document::open(&path, None, None, editor.config.clone()).map_or(
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::NotFound,
+                                    "Cannot open document",
+                                )),
+                                |doc| {
                                     // Asynchronously highlight the new document
                                     helix_event::send_blocking(
                                         &self.preview_highlight_handler,
                                         path.clone(),
                                     );
-                                    CachedPreview::Document(Box::new(doc))
-                                })
-                                .unwrap_or(CachedPreview::NotFound),
-                        },
-                    )
+                                    Ok(CachedPreview::Document(Box::new(doc)))
+                                },
+                            )
+                        } else {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                "Neither a dir, nor a file",
+                            ))
+                        }
+                    })
                     .unwrap_or(CachedPreview::NotFound);
                 self.preview_cache.insert(path.clone(), preview);
                 Some((Preview::Cached(&self.preview_cache[&path]), range))
@@ -656,10 +690,6 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
 
         // -- Render the input bar:
 
-        let area = inner.clip_left(1).with_height(1);
-        // render the prompt first since it will clear its background
-        self.prompt.render(area, surface, cx);
-
         let count = format!(
             "{}{}/{}",
             if status.running || self.matcher.active_injectors() > 0 {
@@ -670,6 +700,13 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
             snapshot.matched_item_count(),
             snapshot.item_count(),
         );
+
+        let area = inner.clip_left(1).with_height(1);
+        let line_area = area.clip_right(count.len() as u16 + 1);
+
+        // render the prompt first since it will clear its background
+        self.prompt.render(line_area, surface, cx);
+
         surface.set_stringn(
             (area.x + area.width).saturating_sub(count.len() as u16 + 1),
             area.y,
@@ -830,6 +867,7 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
         // clear area
         let background = cx.editor.theme.get("ui.background");
         let text = cx.editor.theme.get("ui.text");
+        let directory = cx.editor.theme.get("ui.text.directory");
         surface.clear_with(area, background);
 
         const BLOCK: Block<'_> = Block::bordered();
@@ -851,6 +889,22 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                     doc
                 }
                 _ => {
+                    if let Some(dir_content) = preview.dir_content() {
+                        for (i, (path, is_dir)) in
+                            dir_content.iter().take(inner.height as usize).enumerate()
+                        {
+                            let style = if *is_dir { directory } else { text };
+                            surface.set_stringn(
+                                inner.x,
+                                inner.y + i as u16,
+                                path,
+                                inner.width as usize,
+                                style,
+                            );
+                        }
+                        return;
+                    }
+
                     let alt_text = preview.placeholder();
                     let x = inner.x + inner.width.saturating_sub(alt_text.len() as u16) / 2;
                     let y = inner.y + inner.height / 2;
@@ -1024,7 +1078,7 @@ where
             key!(Esc) | ctrl!('c') => return close_fn(self),
             alt!(Enter) => {
                 if let Some(option) = self.selection() {
-                    (self.callback_fn)(ctx, option, Action::Load);
+                    (self.callback_fn)(ctx, option, Action::Replace);
                 }
             }
             key!(Enter) => {
@@ -1070,10 +1124,14 @@ where
                 self.toggle_preview();
             }
             ctrl!('i') => {
-                self.goto_child(ctx);
+                if self.open_child(ctx) {
+                    return close_fn(self);
+                }
             }
             ctrl!('o') => {
-                self.goto_parent(ctx);
+                if self.open_parent(ctx) {
+                    return close_fn(self);
+                }
             }
             _ => {
                 self.prompt_handle_event(event, ctx);
@@ -1089,7 +1147,15 @@ where
         let inner = block.inner(area);
 
         // prompt area
-        let area = inner.clip_left(1).with_height(1);
+        let render_preview =
+            self.show_preview && self.file_fn.is_some() && area.width > MIN_AREA_WIDTH_FOR_PREVIEW;
+
+        let picker_width = if render_preview {
+            area.width / 2
+        } else {
+            area.width
+        };
+        let area = inner.clip_left(1).with_height(1).with_width(picker_width);
 
         self.prompt.cursor(area, editor)
     }
@@ -1113,29 +1179,38 @@ impl<T: 'static + Send + Sync, D> Drop for Picker<T, D> {
 type PickerCallback<T> = Box<dyn Fn(&mut Context, &T, Action)>;
 
 pub trait PickerNavigation {
-    fn change_root(&mut self, _root: Arc<std::path::PathBuf>, _cx: &mut Context) {}
-    fn goto_parent(&mut self, _cx: &mut Context) {}
-    fn goto_child(&mut self, _cx: &mut Context) {}
+    fn open_at_root(&mut self, _root: std::path::PathBuf, _cx: &mut Context) {}
+    fn open_parent(&mut self, _cx: &mut Context) -> bool {
+        false
+    }
+    fn open_child(&mut self, _cx: &mut Context) -> bool {
+        false
+    }
 }
 
 impl PickerNavigation for Picker<std::path::PathBuf, std::path::PathBuf> {
-    fn change_root(&mut self, root: Arc<std::path::PathBuf>, cx: &mut Context) {
-        self.columns = ui::file_picker_columns(&root).into_iter().collect();
-
-        self.editor_data = root;
-        let files = ui::walk_dir(&self.editor_data, &cx.editor.config());
-        self.matcher.restart(true);
-        ui::inject_files(&*self, files);
-        self.cursor = 0;
+    fn open_at_root(&mut self, root: std::path::PathBuf, cx: &mut Context) {
+        let callback = Box::pin(async move {
+            let call =
+                crate::job::Callback::EditorCompositor(Box::new(move |editor, compositor| {
+                    let picker = super::file_picker(root, &editor.config());
+                    compositor.push(Box::new(ui::overlay::overlaid(picker)));
+                }));
+            Ok(call)
+        });
+        cx.jobs.callback(callback);
     }
 
-    fn goto_parent(&mut self, cx: &mut Context) {
+    fn open_parent(&mut self, cx: &mut Context) -> bool {
         if let Some(parent) = &self.editor_data.parent() {
-            self.change_root(Arc::new(parent.to_path_buf()), cx);
+            self.open_at_root(parent.to_path_buf(), cx);
+            true
+        } else {
+            false
         }
     }
 
-    fn goto_child(&mut self, cx: &mut Context) {
+    fn open_child(&mut self, cx: &mut Context) -> bool {
         use std::ops::Deref;
 
         if let Some(selection) = self.selection() {
@@ -1149,9 +1224,11 @@ impl PickerNavigation for Picker<std::path::PathBuf, std::path::PathBuf> {
                 child.push(comp);
                 if child.is_dir() {
                     self.prompt.clear(cx.editor);
-                    self.change_root(Arc::new(child), cx);
+                    self.open_at_root(child, cx);
+                    return true;
                 }
             }
         }
+        false
     }
 }
